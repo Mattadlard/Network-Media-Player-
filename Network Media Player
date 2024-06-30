@@ -1,0 +1,138 @@
+import time
+import pychromecast
+import subprocess
+import os
+from flask import Flask, render_template, request, redirect, url_for
+import soco  # For Sonos speaker control
+
+app = Flask(__name__)
+
+def discover_devices():
+    """
+    Discover Chromecast and Sonos devices on the network.
+    """
+    chromecasts, _ = pychromecast.get_chromecasts()
+    sonos_devices = soco.discover()
+    devices = [cc.device.friendly_name for cc in chromecasts]
+    if sonos_devices:
+        devices.extend([device.player_name for device in sonos_devices])
+    return devices
+
+def play_music_chromecast(device_name, file_path):
+    """
+    Play music on the specified Chromecast device.
+    """
+    chromecasts, _ = pychromecast.get_chromecasts()
+    cast = next(cc for cc in chromecasts if cc.device.friendly_name == device_name)
+    cast.wait()  # Wait for the cast device to be ready
+    mc = cast.media_controller
+    mc.play_media(file_path, "audio/mp3")
+    mc.block_until_active()
+
+    while mc.status.player_state == "PLAYING":
+        time.sleep(1)
+
+    mc.stop()
+    cast.disconnect()
+
+def play_music_sonos(device_name, file_path):
+    """
+    Play music on the specified Sonos device.
+    """
+    sonos_devices = soco.discover()
+    if sonos_devices:
+        device = next(dev for dev in sonos_devices if dev.player_name == device_name)
+        device.play_uri(file_path)
+
+def stop_music_chromecast(device_name):
+    """
+    Stop music playback on the specified Chromecast device.
+    """
+    chromecasts, _ = pychromecast.get_chromecasts()
+    cast = next(cc for cc in chromecasts if cc.device.friendly_name == device_name)
+    cast.wait()
+    mc = cast.media_controller
+    mc.stop()
+
+def stop_music_sonos(device_name):
+    """
+    Stop music playback on the specified Sonos device.
+    """
+    sonos_devices = soco.discover()
+    if sonos_devices:
+        device = next(dev for dev in sonos_devices if dev.player_name == device_name)
+        device.stop()
+
+@app.route('/')
+def index():
+    """
+    Render the index page with music metadata and album images.
+    """
+    metadata = get_music_metadata()  # Need to implement this function
+    album_images = get_album_images()  # Need to implement this function
+    devices = discover_devices()
+    return render_template('index.html', metadata=metadata, album_images=album_images, devices=devices)
+
+@app.route('/play', methods=['POST'])
+def play():
+    """
+    Play the specified music file on the selected device.
+    """
+    device_name = request.form['device_name']
+    file_path = request.form['file_path']
+    if 'chromecast' in device_name.lower():
+        play_music_chromecast(device_name, file_path)
+    else:
+        play_music_sonos(device_name, file_path)
+    return redirect(url_for('index'))
+
+@app.route('/stop', methods=['POST'])
+def stop():
+    """
+    Stop the music on the selected device.
+    """
+    device_name = request.form['device_name']
+    if 'chromecast' in device_name.lower():
+        stop_music_chromecast(device_name)
+    else:
+        stop_music_sonos(device_name)
+    return redirect(url_for('index'))
+
+# Example usage
+music_file = "/path/to/your/music.mp3"
+devices = discover_devices()
+if len(devices) > 0:
+    device_name = devices[0]
+    # I'm just starting with the first device found
+    if 'chromecast' in device_name.lower():
+        play_music_chromecast(device_name, music_file)
+    else:
+        play_music_sonos(device_name, music_file)
+    app.run(host='0.0.0.0', port=5000)  # Run the web server
+else:
+    print("No devices found on the network.")
+
+# Placeholder for functions to be implemented
+def get_music_metadata():
+    """
+    Implement logic to extract and return music metadata.
+    """
+    pass
+
+def get_album_images():
+    """
+    Implement logic to extract and return album images.
+    """
+    pass
+
+# Setting up VB-CABLE
+def configure_vb_cable():
+    """
+    Notes to self:
+    - Install VB-CABLE from https://www.vb-audio.com/Cable/
+    - Configure system audio to use VB-CABLE as input/output.
+    """
+    pass
+
+# Call the function to configure VB-CABLE if necessary
+configure_vb_cable()
